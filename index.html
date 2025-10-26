@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NASCAR Live Feed with Points and Season Totals</title>
+</head>
+<body>
+
+<!-- Lap Number Table -->
+<h2>Lap Number: <span id="lapNumber"></span></h2>
+
+<h2>Vehicle Data</h2>
+<table border="1">
+  <thead>
+    <tr>
+      <th>Vehicle Number</th>
+      <th>Driver</th>
+      <th>Owner</th>
+    </tr>
+  </thead>
+  <tbody id="liveFeedData"></tbody>
+</table>
+
+<p>Last Updated: <span id="lastUpdate"></span></p>
+
+<!-- Owner Points Table -->
+<h2>Owner Points Table</h2>
+<table border="1">
+  <thead>
+    <tr>
+      <th>Owner</th>
+      <th>Driver</th>
+      <th>Points Earned This Race</th>
+      <th>Season Total Points</th>
+      <th>Points +/- from 8th Place</th>
+    </tr>
+  </thead>
+  <tbody id="ownerPointsTable"></tbody>
+</table>
+
+<p>Last Updated: <span id="lastUpdatePoints"></span></p>
+
+<script>
+  // Owner-Driver Mapping with Season Totals
+  const ownerDriverMapping = {
+    "Shane Van Gisbergen": { owner: "Bobby Grobe (#2)", seasonTotal: 37 },
+    "Tyler Reddick": { owner: "Brian Rye (#1)", seasonTotal: 48 },
+    "Kyle Larson": { owner: "Daniel Grobe", seasonTotal: 77 },
+    "Joey Logano": { owner: "David Lee Grobe", seasonTotal: 83 },
+    "Chase Elliott": { owner: "Susan Grobe", seasonTotal: 89 },
+    "William Byron": { owner: "Travis Penny", seasonTotal: 74 },
+    "Austin Cindric": { owner: "Tommy Rye", seasonTotal: 87 },
+    "Alex Bowman": { owner: "Jeff Lindhorst", seasonTotal: 84 },
+    "A.J. Allmendinger": { owner: "Connor Rye", seasonTotal: 104 },
+    "Christopher Bell": { owner: "Brian Rye (#2)", seasonTotal: 78 },
+  };
+
+  // Fetch live race feed (Lap and Vehicle Data)
+  function fetchLiveFeed() {
+    fetch('https://cf.nascar.com/live/feeds/live-feed.json')  // Replace with actual URL
+      .then(response => response.json())
+      .then(data => {
+        const lapNumberElement = document.getElementById('lapNumber');
+        const liveFeedData = document.getElementById('liveFeedData');
+        const lastUpdateElement = document.getElementById('lastUpdate');
+        
+        if (data && data.lap_number && Array.isArray(data.vehicles)) {
+          lapNumberElement.textContent = data.lap_number;
+          lastUpdateElement.textContent = new Date().toLocaleTimeString();
+
+          // Clear existing table rows
+          liveFeedData.innerHTML = '';
+
+          // Populate table with vehicle numbers, drivers, and owners
+          data.vehicles.forEach(vehicle => {
+            const driverName = vehicle.driver.full_name.replace(/[\*\#]/g, '').trim(); // Cleaned name
+            const ownerInfo = ownerDriverMapping[driverName] || { owner: 'Unknown', seasonTotal: 0 };
+
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${vehicle.vehicle_number}</td><td>${driverName}</td><td>${ownerInfo.owner}</td>`;
+            liveFeedData.appendChild(row);
+          });
+        } else {
+          console.error('Invalid JSON structure or missing data.');
+        }
+      })
+      .catch(error => console.error('Error fetching live feed:', error));
+  }
+
+  // Fetch live points feed (Owner Points Data)
+  function fetchPointsFeed() {
+    fetch('https://cf.nascar.com/live/feeds/series_1/5424/live_points.json')  // Actual URL
+      .then(response => response.json())
+      .then(data => {
+        const ownerPointsTable = document.getElementById('ownerPointsTable');
+        const lastUpdatePointsElement = document.getElementById('lastUpdatePoints');
+        lastUpdatePointsElement.textContent = new Date().toLocaleTimeString();
+
+        // Clear the table
+        ownerPointsTable.innerHTML = '';
+
+        let driversPoints = [];
+
+        if (Array.isArray(data)) {
+          // Update season total and collect data for sorting
+          data.forEach(vehicle => {
+            const driverName = `${vehicle.first_name.replace(/[\*\#]/g, '').trim()} ${vehicle.last_name.replace(/[\*\#P]/g, '').trim()}`;
+            const pointsEarned = vehicle.points_earned_this_race || 0;
+
+            if (ownerDriverMapping[driverName]) {
+              const ownerInfo = ownerDriverMapping[driverName];
+              ownerInfo.seasonTotal += pointsEarned;  // Update season total
+              
+              // Collect the driver, owner, and updated season total for sorting
+              driversPoints.push({
+                driverName: driverName,
+                owner: ownerInfo.owner,
+                pointsEarned: pointsEarned,
+                seasonTotal: ownerInfo.seasonTotal
+              });
+            }
+          });
+
+          // Sort by seasonTotal in descending order
+          driversPoints.sort((a, b) => b.seasonTotal - a.seasonTotal);
+
+          // Get the season total of the 8th place driver
+          const eighthPlacePoints = driversPoints.length >= 8 ? driversPoints[7].seasonTotal : 0;
+
+          // Populate the sorted table and show points +/- from 8th place
+          driversPoints.forEach(driver => {
+            const pointsDifference = driver.seasonTotal - eighthPlacePoints;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${driver.owner}</td>
+              <td>${driver.driverName}</td>
+              <td>${driver.pointsEarned}</td>
+              <td>${driver.seasonTotal}</td>
+              <td>${pointsDifference >= 0 ? '+' : ''}${pointsDifference}</td>
+            `;
+            ownerPointsTable.appendChild(row);
+          });
+        } else {
+          console.error('Invalid points data structure.');
+        }
+      })
+      .catch(error => console.error('Error fetching points feed:', error));
+  }
+
+  // Initial fetch for both tables
+  fetchLiveFeed();
+  fetchPointsFeed();
+
+  // Set interval for auto-updating every 60 seconds
+  setInterval(fetchLiveFeed, 60000);
+  setInterval(fetchPointsFeed, 60000);
+</script>
+
+</body>
+</html>
